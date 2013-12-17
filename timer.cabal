@@ -14,5 +14,9 @@ executable timer
 
   build-depends: base                 >= 4.6     && < 4.7
                , optparse-applicative >= 0.7.0.2 && < 0.8
+               , acid-state           >= 0.12.1  && < 0.13
 
                , text
+               , time
+               , safecopy
+               , mtl
