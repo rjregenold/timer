@@ -3,8 +3,10 @@
 
 module Main where
 
+import Control.Monad.Reader (ask)
 import Control.Monad.State (state)
 import Data.Acid
+import Data.List
 import Data.SafeCopy
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -98,12 +100,18 @@ data Db = Db
 
 deriveSafeCopy 0 'base ''Db
 
+lookupTimer :: Text -> Query Db (Maybe Timer)
+lookupTimer name = find ((==name) . _timerName) . _dbTimers <$> ask
+
 addTimer :: Text -> Update Db Timer
 addTimer name = state $ \db@Db{..} -> (timer, db { _dbTimers = timer : _dbTimers })
   where
     timer = Timer name []
 
-makeAcidic ''Db ['addTimer]
+makeAcidic ''Db 
+  [ 'lookupTimer
+  , 'addTimer
+  ]
 
 emptyDb :: Db
 emptyDb = Db
@@ -116,12 +124,13 @@ emptyDb = Db
 --------------------------------------------------------------------------------
 
 cmdStart :: AcidState Db -> Text -> IO ()
-cmdStart db name = do
-  timer <- update db $ AddTimer name
-  putStrLn "started"
+cmdStart db name = findOrCreateTimer >>= print
+  where
+    findOrCreateTimer = query db (LookupTimer name)
+      >>= maybe (update db $ AddTimer name) return
 
 cmdStop :: AcidState Db -> Text -> IO ()
-cmdStop db name = putStrLn "stopped"
+cmdStop db name = query db (LookupTimer name) >>= print
 
 cmdActive :: AcidState Db -> IO ()
 cmdActive db = putStrLn "showing active"
