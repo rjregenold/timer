@@ -11,6 +11,8 @@ import qualified Data.Text as T
 import Data.Time
 import Data.Typeable
 import Options.Applicative
+import System.Directory (getHomeDirectory)
+import System.FilePath ((</>))
 
 
 --------------------------------------------------------------------------------
@@ -108,19 +110,42 @@ emptyDb = Db
   { _dbTimers = []
   }
 
+
+--------------------------------------------------------------------------------
+-- commands
+--------------------------------------------------------------------------------
+
+cmdStart :: AcidState Db -> Text -> IO ()
+cmdStart db name = do
+  timer <- update db $ AddTimer name
+  putStrLn "started"
+
+cmdStop :: AcidState Db -> Text -> IO ()
+cmdStop db name = putStrLn "stopped"
+
+cmdActive :: AcidState Db -> IO ()
+cmdActive db = putStrLn "showing active"
+
+cmdList :: AcidState Db -> Text -> IO ()
+cmdList db name = putStrLn "listing details"
+
+
 --------------------------------------------------------------------------------
 -- main
 --------------------------------------------------------------------------------
 
+timerDir :: FilePath -> FilePath
+timerDir = (</> ".timer")
+
 run :: Command -> IO ()
 run cmd = do
-  db <- openLocalStateFrom ".timer" emptyDb
+  dir <- timerDir <$> getHomeDirectory
+  db <- openLocalStateFrom dir emptyDb
   case cmd of
-    (Start name) -> do
-      timer <- update db $ AddTimer name
-      print timer
-    _ -> return ()
-  putStrLn "not implemented yet"
+    (Start name) -> cmdStart db name
+    (Stop name)  -> cmdStop db name
+    Active       -> cmdActive db
+    (List name)  -> cmdList db name
 
 main :: IO ()
 main = execParser opts >>= run

@@ -20,3 +20,5 @@ executable timer
                , time
                , safecopy
                , mtl
+               , directory
+               , filepath
