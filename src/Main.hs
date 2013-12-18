@@ -7,6 +7,7 @@ import Control.Monad.Reader (ask)
 import Control.Monad.State (state)
 import Data.Acid
 import Data.List
+import Data.Maybe
 import Data.SafeCopy
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -123,8 +124,21 @@ emptyDb = Db
 -- commands
 --------------------------------------------------------------------------------
 
+activeEntries :: Timer -> [Entry]
+activeEntries = filter isEntryActive . _timerEntries
+
+isEntryActive :: Entry -> Bool
+isEntryActive = isNothing . _entryEndAt
+
+closeEntry :: UTCTime -> Entry -> Entry
+closeEntry now entry = entry { _entryEndAt = Just now }
+
 cmdStart :: AcidState Db -> Text -> IO ()
-cmdStart db name = findOrCreateTimer >>= print
+cmdStart db name = do
+  timer <- findOrCreateTimer
+  now <- getCurrentTime
+  let entries = map (closeEntry now) $ activeEntries timer
+  print timer
   where
     findOrCreateTimer = query db (LookupTimer name)
       >>= maybe (update db $ AddTimer name) return
