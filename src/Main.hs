@@ -151,7 +151,7 @@ stopTimer endAt timer@Timer{..} =
 isTimerActive :: Timer -> Bool
 isTimerActive Timer{..} = isJust _timerStartAt
 
-data CommandError = CommandErrorTimerNotFound
+data CommandError = CommandErrorTimerNotFound Text
 
 cmdStart :: AcidState Db -> Text -> IO Timer
 cmdStart db name = do
@@ -167,7 +167,7 @@ cmdStop :: AcidState Db -> Text -> IO (Either CommandError Timer)
 cmdStop db name = do
   now <- getCurrentTime
   query db (LookupTimerByName name)
-    >>= maybe (return $ Left CommandErrorTimerNotFound) (cmdStop' now)
+    >>= maybe (return $ Left $ CommandErrorTimerNotFound name) (cmdStop' now)
   where
     cmdStop' now timer =
       update db (UpdateTimer (stopTimer now timer))
@@ -181,7 +181,7 @@ cmdActive db =
 cmdList :: AcidState Db -> Text -> IO (Either CommandError [Entry])
 cmdList db name =
   query db (LookupTimerByName name)
-    >>= return . maybe (Left CommandErrorTimerNotFound) (Right . _timerEntries)
+    >>= return . maybe (Left $ CommandErrorTimerNotFound name) (Right . _timerEntries)
 
 
 --------------------------------------------------------------------------------
@@ -189,7 +189,7 @@ cmdList db name =
 --------------------------------------------------------------------------------
 
 errDesc :: CommandError -> String
-errDesc CommandErrorTimerNotFound = "timer not found"
+errDesc (CommandErrorTimerNotFound name) = "timer [" ++ T.unpack name ++ "] not found"
 
 renderErr :: CommandError -> IO ()
 renderErr = putStrLn . errDesc
