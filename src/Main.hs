@@ -3,8 +3,10 @@
 
 module Main where
 
+import Control.Error
+import Control.Monad
 import Control.Monad.Reader (ask)
-import Control.Monad.State (state)
+import Control.Monad.State (modify, state)
 import Data.Acid
 import Data.List
 import Data.Maybe
@@ -80,14 +82,15 @@ commands = subparser
 
 data Entry = Entry
   { _entryStartAt :: UTCTime
-  , _entryEndAt   :: Maybe UTCTime
+  , _entryEndAt   :: UTCTime
   }
   deriving (Show, Typeable)
 
 deriveSafeCopy 0 'base ''Entry
 
 data Timer = Timer
-  { _timerName :: Text
+  { _timerName    :: Text
+  , _timerStartAt :: Maybe UTCTime
   , _timerEntries :: [Entry]
   }
   deriving (Show, Typeable)
@@ -101,17 +104,25 @@ data Db = Db
 
 deriveSafeCopy 0 'base ''Db
 
-lookupTimer :: Text -> Query Db (Maybe Timer)
-lookupTimer name = find ((==name) . _timerName) . _dbTimers <$> ask
+allTimers :: Query Db [Timer]
+allTimers = _dbTimers <$> ask
 
-addTimer :: Text -> Update Db Timer
-addTimer name = state $ \db@Db{..} -> (timer, db { _dbTimers = timer : _dbTimers })
+lookupTimerByName :: Text -> Query Db (Maybe Timer)
+lookupTimerByName name = find ((==name) . _timerName) . _dbTimers <$> ask
+
+addTimer :: Timer -> Update Db Timer
+addTimer timer = state $ \db@Db{..} -> (timer, db { _dbTimers = timer : _dbTimers })
+
+updateTimer :: Timer -> Update Db Timer
+updateTimer timer = state $ \db@Db{..} -> (timer, db { _dbTimers = timer : dropTimer _dbTimers})
   where
-    timer = Timer name []
+    dropTimer = filter ((/= (_timerName timer)) . _timerName)
 
 makeAcidic ''Db 
-  [ 'lookupTimer
+  [ 'allTimers
+  , 'lookupTimerByName
   , 'addTimer
+  , 'updateTimer
   ]
 
 emptyDb :: Db
@@ -124,33 +135,87 @@ emptyDb = Db
 -- commands
 --------------------------------------------------------------------------------
 
-activeEntries :: Timer -> [Entry]
-activeEntries = filter isEntryActive . _timerEntries
+startTimer :: UTCTime -> Timer -> Timer
+startTimer now timer@Timer{..} =
+  timer { _timerStartAt = Just now }
 
-isEntryActive :: Entry -> Bool
-isEntryActive = isNothing . _entryEndAt
-
-closeEntry :: UTCTime -> Entry -> Entry
-closeEntry now entry = entry { _entryEndAt = Just now }
-
-cmdStart :: AcidState Db -> Text -> IO ()
-cmdStart db name = do
-  timer <- findOrCreateTimer
-  now <- getCurrentTime
-  let entries = map (closeEntry now) $ activeEntries timer
-  print timer
+stopTimer :: UTCTime -> Timer -> Timer
+stopTimer endAt timer@Timer{..} =
+  maybe timer stopTimer' _timerStartAt
   where
-    findOrCreateTimer = query db (LookupTimer name)
-      >>= maybe (update db $ AddTimer name) return
+    stopTimer' startAt = timer
+      { _timerStartAt = Nothing
+      , _timerEntries = Entry startAt endAt : _timerEntries
+      }
 
-cmdStop :: AcidState Db -> Text -> IO ()
-cmdStop db name = query db (LookupTimer name) >>= print
+isTimerActive :: Timer -> Bool
+isTimerActive Timer{..} = isJust _timerStartAt
 
-cmdActive :: AcidState Db -> IO ()
-cmdActive db = putStrLn "showing active"
+data CommandError = CommandErrorTimerNotFound
 
-cmdList :: AcidState Db -> Text -> IO ()
-cmdList db name = putStrLn "listing details"
+cmdStart :: AcidState Db -> Text -> IO Timer
+cmdStart db name = do
+  now <- getCurrentTime
+  findOrCreateTimer
+    >>= return . startTimer now
+    >>= update db . UpdateTimer
+  where
+    findOrCreateTimer = query db (LookupTimerByName name)
+      >>= maybe (update db $ AddTimer (Timer name Nothing [])) return
+
+cmdStop :: AcidState Db -> Text -> IO (Either CommandError Timer)
+cmdStop db name = do
+  now <- getCurrentTime
+  query db (LookupTimerByName name)
+    >>= maybe (return $ Left CommandErrorTimerNotFound) (cmdStop' now)
+  where
+    cmdStop' now timer =
+      update db (UpdateTimer (stopTimer now timer))
+        >>= return . Right
+
+cmdActive :: AcidState Db -> IO [Timer]
+cmdActive db =
+  query db AllTimers
+    >>= return . filter isTimerActive
+
+cmdList :: AcidState Db -> Text -> IO (Either CommandError [Entry])
+cmdList db name =
+  query db (LookupTimerByName name)
+    >>= return . maybe (Left CommandErrorTimerNotFound) (Right . _timerEntries)
+
+
+--------------------------------------------------------------------------------
+-- interface
+--------------------------------------------------------------------------------
+
+errDesc :: CommandError -> String
+errDesc CommandErrorTimerNotFound = "timer not found"
+
+renderErr :: CommandError -> IO ()
+renderErr = putStrLn . errDesc
+
+renderStart :: Timer -> IO ()
+renderStart _ = putStrLn "started timer"
+
+renderStop :: Either CommandError Timer -> IO ()
+renderStop (Left err) = renderErr err
+renderStop (Right timer) = putStrLn "stopped timer"
+
+renderActive :: [Timer] -> IO ()
+renderActive = mapM_ renderTimer
+  where
+    renderTimer Timer{..} = putStrLn (T.unpack _timerName ++ ": " ++ show _timerStartAt)
+
+renderList :: Either CommandError [Entry] -> IO ()
+renderList (Left err) = renderErr err
+renderList (Right entries) = mapM_ renderEntry entries
+  where
+    renderEntry Entry{..} = putStrLn $ unwords
+      [ "start at: "
+      , show _entryStartAt
+      , "end at: "
+      , show _entryEndAt
+      ]
 
 
 --------------------------------------------------------------------------------
@@ -165,10 +230,10 @@ run cmd = do
   dir <- timerDir <$> getHomeDirectory
   db <- openLocalStateFrom dir emptyDb
   case cmd of
-    (Start name) -> cmdStart db name
-    (Stop name)  -> cmdStop db name
-    Active       -> cmdActive db
-    (List name)  -> cmdList db name
+    (Start name) -> cmdStart db name >>= renderStart
+    (Stop name)  -> cmdStop db name >>= renderStop
+    Active       -> cmdActive db >>= renderActive
+    (List name)  -> cmdList db name >>= renderList
 
 main :: IO ()
 main = execParser opts >>= run
