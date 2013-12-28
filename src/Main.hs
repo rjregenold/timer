@@ -6,14 +6,14 @@ module Main where
 import Control.Error
 import Control.Monad
 import Control.Monad.Reader (ask)
-import Control.Monad.State (modify, state)
+import Control.Monad.State (State(..), evalState, get, modify, put, state)
 import Data.Acid
 import Data.List
 import Data.Maybe
 import Data.SafeCopy
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Time
+import Data.Thyme.Time
 import Data.Typeable
 import Options.Applicative
 import System.Directory (getHomeDirectory)
@@ -79,6 +79,33 @@ commands = subparser
 --------------------------------------------------------------------------------
 -- data
 --------------------------------------------------------------------------------
+
+instance SafeCopy Day where
+  kind = base
+  getCopy = contain $ ModifiedJulianDay <$> safeGet
+  putCopy = contain . safePut . toModifiedJulianDay
+  errorTypeName = const "Day"
+
+instance SafeCopy DiffTime where
+  kind = base
+  getCopy = contain $ fromRational <$> safeGet
+  putCopy = contain . safePut . toRational
+  errorTypeName = const "DiffTime"
+
+instance SafeCopy NominalDiffTime where
+  kind = base
+  getCopy = contain $ fromRational <$> safeGet
+  putCopy = contain . safePut . toRational
+  errorTypeName = const "NominalDiffTime"
+
+instance SafeCopy UTCTime where
+  kind = base
+  getCopy   = contain $ do day      <- safeGet
+                           diffTime <- safeGet
+                           return (mkUTCTime day diffTime)
+  putCopy u = contain $ do safePut (utctDay $ unUTCTime u)
+                           safePut (utctDayTime $ unUTCTime u)
+  errorTypeName = const "UTCTime"
 
 data Entry = Entry
   { _entryStartAt :: UTCTime
@@ -151,6 +178,9 @@ stopTimer endAt timer@Timer{..} =
 isTimerActive :: Timer -> Bool
 isTimerActive Timer{..} = isJust _timerStartAt
 
+entryDuration :: Entry -> NominalDiffTime
+entryDuration Entry{..} = diffUTCTime _entryEndAt _entryStartAt
+
 data CommandError = CommandErrorTimerNotFound Text
 
 cmdStart :: AcidState Db -> Text -> IO Timer
@@ -210,12 +240,43 @@ renderList :: Either CommandError [Entry] -> IO ()
 renderList (Left err) = renderErr err
 renderList (Right entries) = mapM_ renderEntry entries
   where
-    renderEntry Entry{..} = putStrLn $ unwords
-      [ "start at: "
-      , show _entryStartAt
-      , "end at: "
-      , show _entryEndAt
-      ]
+    renderEntry = putStrLn . drawEntry
+
+drawEntry :: Entry -> String
+drawEntry entry@Entry{..} = unwords
+  [ "duration: "
+  , drawDuration $ toDuration $ entryDuration entry
+  , "start at: "
+  , show _entryStartAt
+  , "end at: "
+  , show _entryEndAt
+  ]
+
+data Duration = Duration Integer Integer Integer
+
+drawDuration :: Duration -> String
+drawDuration (Duration hour min sec) = intercalate ":" $ map show [hour, min, sec]
+
+hourInSec, minInSec, secInSec :: Integer
+hourInSec = 3600
+minInSec  = 60
+secInSec  = 1
+
+toDuration :: NominalDiffTime -> Duration
+toDuration diffTime = evalState go (toSeconds diffTime)
+  where
+    go = do
+      hour <- splitDuration hourInSec
+      min  <- splitDuration minInSec
+      sec  <- splitDuration secInSec
+      return $ Duration hour min sec
+
+splitDuration :: Integer -> State Double Integer
+splitDuration divisor = do
+  duration <- get
+  let amount = floor $ duration / (fromIntegral divisor)
+  put $ duration - (fromIntegral (amount * divisor))
+  return amount
 
 
 --------------------------------------------------------------------------------
