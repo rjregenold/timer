@@ -13,11 +13,15 @@ import Data.Maybe
 import Data.SafeCopy
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Thyme.Format
 import Data.Thyme.Time
 import Data.Typeable
 import Options.Applicative
 import System.Directory (getHomeDirectory)
 import System.FilePath ((</>))
+import System.Locale
+import qualified Text.PrettyPrint.Boxes as PP
+import Text.Printf
 
 
 --------------------------------------------------------------------------------
@@ -238,24 +242,39 @@ renderActive = mapM_ renderTimer
 
 renderList :: Either CommandError [Entry] -> IO ()
 renderList (Left err) = renderErr err
-renderList (Right entries) = mapM_ renderEntry entries
+renderList (Right entries) = renderEntries =<< mapM mkEntryTuple entries
   where
-    renderEntry = putStrLn . drawEntry
+    mkEntryTuple entry@Entry{..} = do
+      localStartAt <- utcToLocalZonedTime _entryStartAt
+      localEndAt <- utcToLocalZonedTime _entryEndAt
+      return (entryDuration entry, localStartAt, localEndAt)
+    renderEntries entries =
+      let (durations', starts', ends') = foldl (\(xs,ys,zs) (x,y,z) -> (x : xs, y : ys, z : zs)) ([],[],[]) entries
+          durations = reverse durations'
+          starts = reverse starts'
+          ends = reverse ends'
+      in PP.printBox $ PP.hsep 4 PP.left 
+        [ drawDurations durations
+        , drawEntryDates "Start" starts
+        , drawEntryDates "End" ends
+        ]
 
-drawEntry :: Entry -> String
-drawEntry entry@Entry{..} = unwords
-  [ "duration: "
-  , drawDuration $ toDuration $ entryDuration entry
-  , "start at: "
-  , show _entryStartAt
-  , "end at: "
-  , show _entryEndAt
-  ]
+drawDurations :: [NominalDiffTime] -> PP.Box
+drawDurations xs = PP.vcat PP.left ((PP.text "Duration") : durationBoxes)
+  where
+    durationBoxes = map (PP.text . drawDuration . toDuration) xs
+
+drawEntryDates :: String -> [ZonedTime] -> PP.Box
+drawEntryDates title xs = PP.vcat PP.left ((PP.text title) : dateBoxes)
+  where
+    dateBoxes = map (PP.text . formatTime defaultTimeLocale "%x %r") xs
 
 data UIDuration = UIDuration Integer Integer Integer
 
 drawDuration :: UIDuration -> String
-drawDuration (UIDuration hour min sec) = intercalate ":" $ map show [hour, min, sec]
+drawDuration (UIDuration hour min sec) = intercalate ":" $ map fmt [hour, min, sec]
+  where
+    fmt = printf "%02d"
 
 hourInSec, minInSec, secInSec :: Integer
 hourInSec = 3600
