@@ -252,24 +252,24 @@ drawEntry entry@Entry{..} = unwords
   , show _entryEndAt
   ]
 
-data Duration = Duration Integer Integer Integer
+data UIDuration = UIDuration Integer Integer Integer
 
-drawDuration :: Duration -> String
-drawDuration (Duration hour min sec) = intercalate ":" $ map show [hour, min, sec]
+drawDuration :: UIDuration -> String
+drawDuration (UIDuration hour min sec) = intercalate ":" $ map show [hour, min, sec]
 
 hourInSec, minInSec, secInSec :: Integer
 hourInSec = 3600
 minInSec  = 60
 secInSec  = 1
 
-toDuration :: NominalDiffTime -> Duration
+toDuration :: NominalDiffTime -> UIDuration
 toDuration diffTime = evalState go (toSeconds diffTime)
   where
     go = do
       hour <- splitDuration hourInSec
       min  <- splitDuration minInSec
       sec  <- splitDuration secInSec
-      return $ Duration hour min sec
+      return $ UIDuration hour min sec
 
 splitDuration :: Integer -> State Double Integer
 splitDuration divisor = do
