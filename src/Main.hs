@@ -1,8 +1,9 @@
-{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, RecordWildCards,
+{-# LANGUAGE Arrows, DeriveDataTypeable, OverloadedStrings, RecordWildCards,
     TemplateHaskell, TypeFamilies #-}
 
 module Main where
 
+import Control.Arrow
 import Control.Error
 import Control.Monad
 import Control.Monad.Reader (ask)
@@ -291,11 +292,10 @@ toDuration diffTime = evalState go (toSeconds diffTime)
       return $ UIDuration hour min sec
 
 splitDuration :: Integer -> State Double Integer
-splitDuration divisor = do
-  duration <- get
-  let amount = floor $ duration / (fromIntegral divisor)
-  put $ duration - (fromIntegral (amount * divisor))
-  return amount
+splitDuration divisor = state (amount &&& newDuration)
+  where
+    amount = floor . (/ fromIntegral divisor)
+    newDuration duration = duration - (fromIntegral (amount duration * divisor))
 
 
 --------------------------------------------------------------------------------
