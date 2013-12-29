@@ -4,9 +4,9 @@ A project-based timer for tracking those billable hours.
 
 ## Usage
 
-The timer is project-based. That means most commands take a `NAME`, which
+The timer is project-based. That means most commands take a `NAME` which
 should be the name of the project. For example, if you're working on a project
-for FooBar, Inc, your workflow might look something like this:
+for `FooBar, Inc` your workflow might look something like this:
 
 ```
 $ timer start foobar
@@ -35,7 +35,7 @@ $ timer stop [NAME]
 
 ### Cancel a timer
 
-Use this if you accidentally started a timer, or if you do not want to keep the
+Use this if you accidentally started a timer, or if you do not want to record the
 current timer entry.
 
 ```
