@@ -38,33 +38,23 @@ data Command = Start Text
 textArg :: String -> Maybe Text
 textArg = Just . T.pack
 
+timerNameArg :: Parser Text
+timerNameArg = argument textArg
+               ( metavar "NAME"
+              <> help "the timer NAME"
+               )
+
 startOpts :: Parser Command
-startOpts = Start
-  <$> argument textArg
-      ( metavar "NAME"
-     <> help "the timer NAME"
-      )
+startOpts = Start <$> timerNameArg
 
 stopOpts :: Parser Command
-stopOpts = Stop
-  <$> argument textArg
-      ( metavar "NAME"
-     <> help "the timer NAME"
-      )
+stopOpts = Stop <$> timerNameArg
 
 cancelOpts :: Parser Command
-cancelOpts = Cancel
-  <$> argument textArg
-      ( metavar "NAME"
-     <> help "the timer NAME"
-      )
+cancelOpts = Cancel <$> timerNameArg
 
 listOpts :: Parser Command
-listOpts = List
-  <$> argument textArg
-      ( metavar "NAME"
-     <> help "the timer NAME"
-      )
+listOpts = List <$> timerNameArg
 
 commands :: Parser Command
 commands = subparser
