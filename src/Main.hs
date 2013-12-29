@@ -31,6 +31,7 @@ import Text.Printf
 
 data Command = Start Text
              | Stop Text
+             | Cancel Text
              | Active
              | List Text
 
@@ -56,6 +57,14 @@ stopOpts = Stop
      <> value emptyName 
       )
 
+cancelOpts :: Parser Command
+cancelOpts = Cancel
+  <$> argument textArg
+      ( metavar "NAME"
+     <> help "the timer NAME"
+     <> value emptyName
+      )
+
 listOpts :: Parser Command
 listOpts = List
   <$> argument textArg
@@ -72,6 +81,9 @@ commands = subparser
  <> command "stop"
     (info stopOpts
           (progDesc "Stop a timer"))
+ <> command "cancel"
+    (info cancelOpts
+          (progDesc "Cancel a timer"))
  <> command "active"
     (info (pure Active)
           (progDesc "List active timers"))
@@ -168,8 +180,7 @@ emptyDb = Db
 --------------------------------------------------------------------------------
 
 startTimer :: UTCTime -> Timer -> Timer
-startTimer now timer@Timer{..} =
-  timer { _timerStartAt = Just now }
+startTimer now timer@Timer{..} = timer { _timerStartAt = Just now }
 
 stopTimer :: UTCTime -> Timer -> Timer
 stopTimer endAt timer@Timer{..} =
@@ -179,6 +190,9 @@ stopTimer endAt timer@Timer{..} =
       { _timerStartAt = Nothing
       , _timerEntries = Entry startAt endAt : _timerEntries
       }
+
+cancelTimer :: Timer -> Timer
+cancelTimer timer = timer { _timerStartAt = Nothing }
 
 isTimerActive :: Timer -> Bool
 isTimerActive Timer{..} = isJust _timerStartAt
@@ -208,6 +222,15 @@ cmdStop db name = do
       update db (UpdateTimer (stopTimer now timer))
         >>= return . Right
 
+cmdCancel :: AcidState Db -> Text -> IO (Either CommandError Timer)
+cmdCancel db name =
+  query db (LookupTimerByName name)
+    >>= maybe (return $ Left $ CommandErrorTimerNotFound name) cmdCancel'
+  where
+    cmdCancel' timer =
+      update db (UpdateTimer (cancelTimer timer))
+        >>= return . Right
+
 cmdActive :: AcidState Db -> IO [Timer]
 cmdActive db =
   query db AllTimers
@@ -235,6 +258,10 @@ renderStart _ = putStrLn "started timer"
 renderStop :: Either CommandError Timer -> IO ()
 renderStop (Left err) = renderErr err
 renderStop (Right timer) = putStrLn "stopped timer"
+
+renderCancel :: Either CommandError Timer -> IO ()
+renderCancel (Left err) = renderErr err
+renderCancel (Right timer) = putStrLn "cancelled timer"
 
 renderActive :: [Timer] -> IO ()
 renderActive = mapM_ renderTimer
@@ -316,10 +343,11 @@ run cmd = do
   dir <- timerDir <$> getHomeDirectory
   db <- openLocalStateFrom dir emptyDb
   case cmd of
-    (Start name) -> cmdStart db name >>= renderStart
-    (Stop name)  -> cmdStop db name >>= renderStop
-    Active       -> cmdActive db >>= renderActive
-    (List name)  -> cmdList db name >>= renderList
+    (Start name)  -> cmdStart db name >>= renderStart
+    (Stop name)   -> cmdStop db name >>= renderStop
+    (Cancel name) -> cmdCancel db name >>= renderCancel
+    Active        -> cmdActive db >>= renderActive
+    (List name)   -> cmdList db name >>= renderList
 
 main :: IO ()
 main = execParser opts >>= run
