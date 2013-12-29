@@ -22,7 +22,7 @@ Duration    Start                   End
 Use this when you start working.
 
 ```
-$ timer start [NAME]
+$ timer start NAME
 ```
 
 ### Stop a timer
@@ -30,16 +30,16 @@ $ timer start [NAME]
 Use this when you finish working.
 
 ```
-$ timer stop [NAME]
+$ timer stop NAME
 ```
 
 ### Cancel a timer
 
-Use this if you accidentally started a timer, or if you do not want to record the
+Use this if you accidentally started a timer, or if you do not wish to record the
 current timer entry.
 
 ```
-$ timer cancel [NAME]
+$ timer cancel NAME
 ```
 
 ### List active timers
@@ -56,5 +56,5 @@ $ timer active
 Use this to see a list of entries for the given timer.
 
 ```
-$ timer list [NAME]
+$ timer list NAME
 ```

@@ -35,9 +35,6 @@ data Command = Start Text
              | Active
              | List Text
 
-emptyName :: Text
-emptyName = "default"
-
 textArg :: String -> Maybe Text
 textArg = Just . T.pack
 
@@ -46,7 +43,6 @@ startOpts = Start
   <$> argument textArg
       ( metavar "NAME"
      <> help "the timer NAME"
-     <> value emptyName
       )
 
 stopOpts :: Parser Command
@@ -54,7 +50,6 @@ stopOpts = Stop
   <$> argument textArg
       ( metavar "NAME"
      <> help "the timer NAME"
-     <> value emptyName 
       )
 
 cancelOpts :: Parser Command
@@ -62,7 +57,6 @@ cancelOpts = Cancel
   <$> argument textArg
       ( metavar "NAME"
      <> help "the timer NAME"
-     <> value emptyName
       )
 
 listOpts :: Parser Command
@@ -70,7 +64,6 @@ listOpts = List
   <$> argument textArg
       ( metavar "NAME"
      <> help "the timer NAME"
-     <> value emptyName
       )
 
 commands :: Parser Command
