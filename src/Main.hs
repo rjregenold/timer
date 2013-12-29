@@ -17,6 +17,7 @@ import qualified Data.Text as T
 import Data.Thyme.Format
 import Data.Thyme.Time
 import Data.Typeable
+import Data.Traversable (traverse)
 import Options.Applicative
 import System.Directory (getHomeDirectory)
 import System.FilePath ((</>))
@@ -247,19 +248,39 @@ renderCancel (Left err) = renderErr err
 renderCancel (Right timer) = putStrLn "cancelled timer"
 
 renderActive :: [Timer] -> IO ()
-renderActive = mapM_ renderTimer
+renderActive timers = renderCol3 draw =<< mapM mkColTuple timers
   where
-    renderTimer Timer{..} = putStrLn (T.unpack _timerName ++ ": " ++ show _timerStartAt)
+    mkColTuple timer@Timer{..} = do
+      now <- getCurrentTime
+      mLocalStartAt <- traverse utcToLocalZonedTime _timerStartAt
+      return (_timerName, mLocalStartAt, liftA2 diffUTCTime (Just now) _timerStartAt)
+    draw (names, starts, durations) =
+      [ drawTimerNames names
+      , drawDates "Start" $ catMaybes starts
+      , drawDurations $ catMaybes durations
+      ]
 
 renderList :: Either CommandError [Entry] -> IO ()
 renderList (Left err) = renderErr err
-renderList (Right entries) = renderEntries =<< mapM mkEntryTuple entries
+renderList (Right entries) = renderCol3 draw =<< mapM mkEntryTuple entries
   where
     mkEntryTuple entry@Entry{..} = do
       localStartAt <- utcToLocalZonedTime _entryStartAt
       localEndAt <- utcToLocalZonedTime _entryEndAt
       return (entryDuration entry, localStartAt, localEndAt)
-    renderEntries = PP.printBox . drawEntryTuples
+    draw (durations, starts, ends) =
+      [ drawDurations durations
+      , drawDates "Start" starts
+      , drawDates "End" ends
+      ]
+
+drawCol3 :: (([a],[b],[c]) -> [PP.Box]) -> [(a,b,c)] -> PP.Box
+drawCol3 draw xs = if null xs
+                   then PP.nullBox
+                   else PP.hsep hPadding PP.left . draw . mkCols3 $ xs
+
+renderCol3 :: (([a],[b],[c]) -> [PP.Box]) -> [(a,b,c)] -> IO ()
+renderCol3 draw = PP.printBox . drawCol3 draw
 
 hPadding :: Int
 hPadding = 4
@@ -267,22 +288,18 @@ hPadding = 4
 mkCols3 :: [(a,b,c)] -> ([a],[b],[c])
 mkCols3 = foldr (\(x,y,z) (xs,ys,zs) -> (x:xs,y:ys,z:zs)) ([],[],[])
 
-drawEntryTuples :: [(NominalDiffTime, ZonedTime, ZonedTime)] -> PP.Box
-drawEntryTuples = draw . mkCols3
-  where 
-    draw (durations, starts, ends) = PP.hsep hPadding PP.left
-      [ drawDurations durations
-      , drawEntryDates "Start" starts
-      , drawEntryDates "End" ends
-      ]
+drawTimerNames :: [Text] -> PP.Box
+drawTimerNames names = PP.vcat PP.left ((PP.text "Timer") : drawNames)
+  where
+    drawNames = map (PP.text . T.unpack) names
 
 drawDurations :: [NominalDiffTime] -> PP.Box
 drawDurations xs = PP.vcat PP.left ((PP.text "Duration") : durationBoxes)
   where
     durationBoxes = map (drawDuration . toDuration) xs
 
-drawEntryDates :: String -> [ZonedTime] -> PP.Box
-drawEntryDates title xs = PP.vcat PP.left ((PP.text title) : dateBoxes)
+drawDates :: String -> [ZonedTime] -> PP.Box
+drawDates title xs = PP.vcat PP.left ((PP.text title) : dateBoxes)
   where
     dateBoxes = map (PP.text . formatTime defaultTimeLocale "%x %r") xs
 
@@ -337,4 +354,5 @@ main = execParser opts >>= run
   where
     opts = info (helper <*> commands)
       ( fullDesc
-     <> header "timer - a simple way to track time" )
+     <> header "timer - a project-based timer for tracking those billable hours" 
+      )
