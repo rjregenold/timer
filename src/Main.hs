@@ -1,4 +1,4 @@
-{-# LANGUAGE Arrows, DeriveDataTypeable, OverloadedStrings, RecordWildCards,
+{-# LANGUAGE DeriveDataTypeable, OverloadedStrings, RecordWildCards,
     TemplateHaskell, TypeFamilies #-}
 
 module Main where
@@ -250,10 +250,7 @@ renderList (Right entries) = renderEntries =<< mapM mkEntryTuple entries
       localEndAt <- utcToLocalZonedTime _entryEndAt
       return (entryDuration entry, localStartAt, localEndAt)
     renderEntries entries =
-      let (durations', starts', ends') = foldl (\(xs,ys,zs) (x,y,z) -> (x : xs, y : ys, z : zs)) ([],[],[]) entries
-          durations = reverse durations'
-          starts = reverse starts'
-          ends = reverse ends'
+      let (durations, starts, ends) = foldr (\(x,y,z) (xs,ys,zs) -> (x : xs, y : ys, z : zs)) ([],[],[]) entries
       in PP.printBox $ PP.hsep 4 PP.left 
         [ drawDurations durations
         , drawEntryDates "Start" starts
