@@ -249,18 +249,27 @@ renderList (Right entries) = renderEntries =<< mapM mkEntryTuple entries
       localStartAt <- utcToLocalZonedTime _entryStartAt
       localEndAt <- utcToLocalZonedTime _entryEndAt
       return (entryDuration entry, localStartAt, localEndAt)
-    renderEntries entries =
-      let (durations, starts, ends) = foldr (\(x,y,z) (xs,ys,zs) -> (x : xs, y : ys, z : zs)) ([],[],[]) entries
-      in PP.printBox $ PP.hsep 4 PP.left 
-        [ drawDurations durations
-        , drawEntryDates "Start" starts
-        , drawEntryDates "End" ends
-        ]
+    renderEntries = PP.printBox . drawEntryTuples
+
+hPadding :: Int
+hPadding = 4
+
+mkCols3 :: [(a,b,c)] -> ([a],[b],[c])
+mkCols3 = foldr (\(x,y,z) (xs,ys,zs) -> (x:xs,y:ys,z:zs)) ([],[],[])
+
+drawEntryTuples :: [(NominalDiffTime, ZonedTime, ZonedTime)] -> PP.Box
+drawEntryTuples = draw . mkCols3
+  where 
+    draw (durations, starts, ends) = PP.hsep hPadding PP.left
+      [ drawDurations durations
+      , drawEntryDates "Start" starts
+      , drawEntryDates "End" ends
+      ]
 
 drawDurations :: [NominalDiffTime] -> PP.Box
 drawDurations xs = PP.vcat PP.left ((PP.text "Duration") : durationBoxes)
   where
-    durationBoxes = map (PP.text . drawDuration . toDuration) xs
+    durationBoxes = map (drawDuration . toDuration) xs
 
 drawEntryDates :: String -> [ZonedTime] -> PP.Box
 drawEntryDates title xs = PP.vcat PP.left ((PP.text title) : dateBoxes)
@@ -269,10 +278,10 @@ drawEntryDates title xs = PP.vcat PP.left ((PP.text title) : dateBoxes)
 
 data UIDuration = UIDuration Integer Integer Integer
 
-drawDuration :: UIDuration -> String
-drawDuration (UIDuration hour min sec) = intercalate ":" $ map fmt [hour, min, sec]
+drawDuration :: UIDuration -> PP.Box
+drawDuration (UIDuration hour min sec) = PP.punctuateH PP.left (PP.text ":") parts
   where
-    fmt = printf "%02d"
+    parts = map (PP.text . printf "%02d") [hour, min, sec]
 
 hourInSec, minInSec, secInSec :: Integer
 hourInSec = 3600
