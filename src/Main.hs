@@ -253,11 +253,11 @@ renderActive timers = renderCol3 draw =<< mapM mkColTuple timers
     mkColTuple timer@Timer{..} = do
       now <- getCurrentTime
       mLocalStartAt <- traverse utcToLocalZonedTime _timerStartAt
-      return (_timerName, mLocalStartAt, liftA2 diffUTCTime (Just now) _timerStartAt)
-    draw (names, starts, durations) =
+      return (_timerName, liftA2 diffUTCTime (Just now) _timerStartAt, mLocalStartAt)
+    draw (names, durations, starts) =
       [ drawTimerNames names
-      , drawDates "Start" $ catMaybes starts
       , drawDurations $ catMaybes durations
+      , drawDates "Start" $ catMaybes starts
       ]
 
 renderList :: Either CommandError [Entry] -> IO ()
