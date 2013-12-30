@@ -248,7 +248,7 @@ renderCancel (Left err) = renderErr err
 renderCancel (Right timer) = putStrLn "cancelled timer"
 
 renderActive :: [Timer] -> IO ()
-renderActive timers = renderCol3 draw =<< mapM mkColTuple timers
+renderActive = renderCol3 draw <=< mapM mkColTuple
   where
     mkColTuple timer@Timer{..} = do
       now <- getCurrentTime
