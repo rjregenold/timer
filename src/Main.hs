@@ -5,6 +5,7 @@ module Main where
 
 import Control.Arrow
 import Control.Error
+import Control.Monad
 import Control.Monad.Reader (ask)
 import Control.Monad.State (State, evalState, state)
 import Data.Acid
@@ -31,8 +32,9 @@ import Text.Printf
 data Command = Start Text
              | Stop Text
              | Cancel Text
-             | Active
              | List Text
+             | Names
+             | Active
 
 textArg :: String -> Maybe Text
 textArg = Just . T.pack
@@ -66,12 +68,15 @@ commands = subparser
  <> command "cancel"
     (info cancelOpts
           (progDesc "Cancel a timer"))
- <> command "active"
-    (info (pure Active)
-          (progDesc "List active timers"))
  <> command "list"
     (info listOpts
           (progDesc "List timer entries"))
+ <> command "names"
+    (info (pure Names)
+          (progDesc "List all timer names"))
+ <> command "active"
+    (info (pure Active)
+          (progDesc "List active timers"))
   )
 
 
@@ -213,15 +218,20 @@ cmdCancel db name =
       update db (UpdateTimer (cancelTimer timer))
         >>= return . Right
 
-cmdActive :: AcidState Db -> IO [Timer]
-cmdActive db =
-  query db AllTimers
-    >>= return . filter isTimerActive
-
 cmdList :: AcidState Db -> Text -> IO (Either CommandError [Entry])
 cmdList db name =
   query db (LookupTimerByName name)
     >>= return . maybe (Left $ CommandErrorTimerNotFound name) (Right . _timerEntries)
+
+cmdName :: AcidState Db -> IO [Text]
+cmdName db =
+  query db AllTimers
+    >>= return . map _timerName
+
+cmdActive :: AcidState Db -> IO [Timer]
+cmdActive db =
+  query db AllTimers
+    >>= return . filter isTimerActive
 
 
 --------------------------------------------------------------------------------
@@ -245,19 +255,6 @@ renderCancel :: Either CommandError Timer -> IO ()
 renderCancel (Left e) = renderErr e
 renderCancel (Right _) = putStrLn "cancelled timer"
 
-renderActive :: [Timer] -> IO ()
-renderActive timers = renderCol3 draw =<< mapM mkColTuple timers
-  where
-    mkColTuple Timer{..} = do
-      now <- getCurrentTime
-      mLocalStartAt <- traverse utcToLocalZonedTime _timerStartAt
-      return (_timerName, mLocalStartAt, liftA2 diffUTCTime (Just now) _timerStartAt)
-    draw (names, starts, durations) =
-      [ drawTimerNames names
-      , drawDates "Start" $ catMaybes starts
-      , drawDurations $ catMaybes durations
-      ]
-
 renderList :: Either CommandError [Entry] -> IO ()
 renderList (Left e) = renderErr e
 renderList (Right entries) = renderCol3 draw =<< mapM mkEntryTuple entries
@@ -270,6 +267,22 @@ renderList (Right entries) = renderCol3 draw =<< mapM mkEntryTuple entries
       [ drawDurations durations
       , drawDates "Start" starts
       , drawDates "End" ends
+      ]
+
+renderNames :: [Text] -> IO ()
+renderNames = mapM_ putStrLn . map T.unpack . sort
+
+renderActive :: [Timer] -> IO ()
+renderActive = renderCol3 draw <=< mapM mkColTuple
+  where
+    mkColTuple Timer{..} = do
+      now <- getCurrentTime
+      mLocalStartAt <- traverse utcToLocalZonedTime _timerStartAt
+      return (_timerName, mLocalStartAt, liftA2 diffUTCTime (Just now) _timerStartAt)
+    draw (names, starts, durations) =
+      [ drawTimerNames names
+      , drawDates "Start" $ catMaybes starts
+      , drawDurations $ catMaybes durations
       ]
 
 drawCol3 :: (([a],[b],[c]) -> [PP.Box]) -> [(a,b,c)] -> PP.Box
@@ -344,8 +357,9 @@ run cmd = do
     (Start name)  -> cmdStart db name >>= renderStart
     (Stop name)   -> cmdStop db name >>= renderStop
     (Cancel name) -> cmdCancel db name >>= renderCancel
-    Active        -> cmdActive db >>= renderActive
     (List name)   -> cmdList db name >>= renderList
+    Names         -> cmdName db >>= renderNames
+    Active        -> cmdActive db >>= renderActive
 
 main :: IO ()
 main = execParser opts >>= run
