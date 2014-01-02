@@ -83,6 +83,22 @@ current timer entry.
 $ timer cancel NAME
 ```
 
+### List timer entries
+
+Use this to see a list of entries for the given timer.
+
+```
+$ timer list NAME
+```
+
+### List timer names
+
+Use this to see a list of all timer names.
+
+```
+$ timer names
+```
+
 ### List active timers
 
 Use this to see a list of active timers, their duration, and when they were
@@ -90,12 +106,4 @@ started.
 
 ```
 $ timer active
-```
-
-### List timer entries
-
-Use this to see a list of entries for the given timer.
-
-```
-$ timer list NAME
 ```
