@@ -5,12 +5,10 @@ module Main where
 
 import Control.Arrow
 import Control.Error
-import Control.Monad
 import Control.Monad.Reader (ask)
-import Control.Monad.State (State(..), evalState, get, modify, put, state)
+import Control.Monad.State (State, evalState, state)
 import Data.Acid
 import Data.List
-import Data.Maybe
 import Data.SafeCopy
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -240,17 +238,17 @@ renderStart :: Timer -> IO ()
 renderStart _ = putStrLn "started timer"
 
 renderStop :: Either CommandError Timer -> IO ()
-renderStop (Left err) = renderErr err
-renderStop (Right timer) = putStrLn "stopped timer"
+renderStop (Left e) = renderErr e
+renderStop (Right _) = putStrLn "stopped timer"
 
 renderCancel :: Either CommandError Timer -> IO ()
-renderCancel (Left err) = renderErr err
-renderCancel (Right timer) = putStrLn "cancelled timer"
+renderCancel (Left e) = renderErr e
+renderCancel (Right _) = putStrLn "cancelled timer"
 
 renderActive :: [Timer] -> IO ()
 renderActive timers = renderCol3 draw =<< mapM mkColTuple timers
   where
-    mkColTuple timer@Timer{..} = do
+    mkColTuple Timer{..} = do
       now <- getCurrentTime
       mLocalStartAt <- traverse utcToLocalZonedTime _timerStartAt
       return (_timerName, mLocalStartAt, liftA2 diffUTCTime (Just now) _timerStartAt)
@@ -261,7 +259,7 @@ renderActive timers = renderCol3 draw =<< mapM mkColTuple timers
       ]
 
 renderList :: Either CommandError [Entry] -> IO ()
-renderList (Left err) = renderErr err
+renderList (Left e) = renderErr e
 renderList (Right entries) = renderCol3 draw =<< mapM mkEntryTuple entries
   where
     mkEntryTuple entry@Entry{..} = do
@@ -306,9 +304,9 @@ drawDates title xs = PP.vcat PP.left ((PP.text title) : dateBoxes)
 data UIDuration = UIDuration Integer Integer Integer
 
 drawDuration :: UIDuration -> PP.Box
-drawDuration (UIDuration hour min sec) = PP.punctuateH PP.left (PP.text ":") parts
+drawDuration (UIDuration hour minute sec) = PP.punctuateH PP.left (PP.text ":") parts
   where
-    parts = map (PP.text . printf "%02d") [hour, min, sec]
+    parts = map (PP.text . printf "%02d") [hour, minute, sec]
 
 hourInSec, minInSec, secInSec :: Integer
 hourInSec = 3600
@@ -319,10 +317,10 @@ toDuration :: NominalDiffTime -> UIDuration
 toDuration diffTime = evalState go (toSeconds diffTime)
   where
     go = do
-      hour <- splitDuration hourInSec
-      min  <- splitDuration minInSec
-      sec  <- splitDuration secInSec
-      return $ UIDuration hour min sec
+      hour   <- splitDuration hourInSec
+      minute <- splitDuration minInSec
+      sec    <- splitDuration secInSec
+      return $ UIDuration hour minute sec
 
 splitDuration :: Integer -> State Double Integer
 splitDuration divisor = state (amount &&& newDuration)
