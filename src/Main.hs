@@ -13,10 +13,9 @@ import Data.List
 import Data.SafeCopy
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Thyme.Format
-import Data.Thyme.Time
-import Data.Typeable
+import Data.Time
 import Data.Traversable (traverse)
+import Data.Typeable
 import Options.Applicative
 import System.Directory (getHomeDirectory)
 import System.FilePath ((</>))
@@ -83,33 +82,6 @@ commands = subparser
 --------------------------------------------------------------------------------
 -- data
 --------------------------------------------------------------------------------
-
-instance SafeCopy Day where
-  kind = base
-  getCopy = contain $ ModifiedJulianDay <$> safeGet
-  putCopy = contain . safePut . toModifiedJulianDay
-  errorTypeName = const "Day"
-
-instance SafeCopy DiffTime where
-  kind = base
-  getCopy = contain $ fromRational <$> safeGet
-  putCopy = contain . safePut . toRational
-  errorTypeName = const "DiffTime"
-
-instance SafeCopy NominalDiffTime where
-  kind = base
-  getCopy = contain $ fromRational <$> safeGet
-  putCopy = contain . safePut . toRational
-  errorTypeName = const "NominalDiffTime"
-
-instance SafeCopy UTCTime where
-  kind = base
-  getCopy   = contain $ do day      <- safeGet
-                           diffTime <- safeGet
-                           return (mkUTCTime day diffTime)
-  putCopy u = contain $ do safePut (utctDay $ unUTCTime u)
-                           safePut (utctDayTime $ unUTCTime u)
-  errorTypeName = const "UTCTime"
 
 data Entry = Entry
   { _entryStartAt :: UTCTime
@@ -278,11 +250,11 @@ renderActive = renderCol3 draw <=< mapM mkColTuple
     mkColTuple Timer{..} = do
       now <- getCurrentTime
       mLocalStartAt <- traverse utcToLocalZonedTime _timerStartAt
-      return (_timerName, mLocalStartAt, liftA2 diffUTCTime (Just now) _timerStartAt)
-    draw (names, starts, durations) =
+      return (_timerName, liftA2 diffUTCTime (Just now) _timerStartAt, mLocalStartAt)
+    draw (names, durations, starts) =
       [ drawTimerNames names
-      , drawDates "Start" $ catMaybes starts
       , drawDurations $ catMaybes durations
+      , drawDates "Start" $ catMaybes starts
       ]
 
 drawCol3 :: (([a],[b],[c]) -> [PP.Box]) -> [(a,b,c)] -> PP.Box
@@ -327,7 +299,7 @@ minInSec  = 60
 secInSec  = 1
 
 toDuration :: NominalDiffTime -> UIDuration
-toDuration diffTime = evalState go (toSeconds diffTime)
+toDuration diffTime = evalState go diffTime
   where
     go = do
       hour   <- splitDuration hourInSec
@@ -335,7 +307,7 @@ toDuration diffTime = evalState go (toSeconds diffTime)
       sec    <- splitDuration secInSec
       return $ UIDuration hour minute sec
 
-splitDuration :: Integer -> State Double Integer
+splitDuration :: RealFrac n => Integer -> State n Integer
 splitDuration divisor = state (amount &&& newDuration)
   where
     amount = floor . (/ fromIntegral divisor)
