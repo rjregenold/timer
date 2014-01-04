@@ -22,8 +22,6 @@ to do that.
 $ git clone https://github.com/rjregenold/timer.git
 $ cd timer
 $ cabal sandbox init
-$ cabal install --only-dependencies
-$ cabal configure
 $ cabal install
 ```
 
